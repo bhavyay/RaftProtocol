@@ -7,12 +7,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.*;
 
 public class RaftNode {
     private int id;
@@ -26,7 +21,7 @@ public class RaftNode {
     //persistent state on all servers
     private int currentTerm;
     private int votedFor;
-    private String[] log;
+    private List<String> log = new ArrayList<>();
 
     //volatile state on all servers
     private int commitIndex;
@@ -43,7 +38,11 @@ public class RaftNode {
 
     private Thread listenThread;
 
-    public RaftNode(int id, String hostName, int port) {
+    private List<RaftPeer> peers;
+
+    private boolean hasReceivedHeartbeat;
+
+    public RaftNode(int id, String hostName, int port, List<RaftPeer> peerList) {
         this.id = id;
         this.hostName = hostName;
         this.port = port;
@@ -56,9 +55,25 @@ public class RaftNode {
         this.nextIndex = new int[0];
         this.matchIndex = new int[0];
 
+        this.hasReceivedHeartbeat = false;
+
+        this.peers = peerList;
+
         this.electionTimeout = getElectionTimeout();
         System.out.println("Election timeout for server " + id + " is " + electionTimeout);
         this.connections = new HashMap<>();
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public String getHostName() {
+        return hostName;
+    }
+
+    public int getPort() {
+        return port;
     }
 
     public void startServer() {
@@ -84,10 +99,11 @@ public class RaftNode {
 
     private void handleClient(Socket clientSocket) {
         try {
-            ObjectInputStream inputStream = new ObjectInputStream(clientSocket.getInputStream());
+
 //            ObjectOutputStream outputStream = new ObjectOutputStream(clientSocket.getOutputStream());
 
             while (!Thread.currentThread().isInterrupted()) {
+                ObjectInputStream inputStream = new ObjectInputStream(clientSocket.getInputStream());
                 RaftMessage raftMessage = (RaftMessage) inputStream.readObject();
                 if (raftMessage == null) {
                     break;
@@ -101,9 +117,13 @@ public class RaftNode {
                         break;
                     case REQUEST_VOTE:
                         RequestVote requestVote = (RequestVote) raftMessage;
+                        System.out.println("Server " + id + " received request vote from server " + requestVote.getCandidateId());
+                        processVote(requestVote);
                         break;
                     case REQUEST_VOTE_RESPONSE:
                         RequestVoteResponse requestVoteResponse = (RequestVoteResponse) raftMessage;
+                        System.out.println("Server " + id + " received request vote response from server " +
+                                requestVoteResponse.getVoterId() + " with vote granted " + requestVoteResponse.isVoteGranted());
                         break;
                 }
             }
@@ -115,14 +135,17 @@ public class RaftNode {
     public void sendMessage(int destinationId, String destinationHost, int destinationPort, RaftMessage raftMessage) {
         try {
             if (!connections.containsKey(destinationId)) {
+                System.out.println("Server " + id + " is connecting to server " + destinationId);
                 Socket socket = new Socket(destinationHost, destinationPort);
                 connections.put(destinationId, socket);
             }
             ObjectOutputStream outputStream = new ObjectOutputStream(connections.get(destinationId).getOutputStream());
             outputStream.writeObject(raftMessage);
             outputStream.flush();
+            System.out.println("Server " + id + " sent message to server " + destinationId);
         } catch (IOException e) {
             System.out.println("Error in sending message from server " + id + " to server " + destinationId);
+            System.out.println("Exception: " + e.getMessage());
         }
     }
 
@@ -132,8 +155,12 @@ public class RaftNode {
     }
 
     private void runAsCandidate() {
-        // TODO
         System.out.println("Server " + id + " is running as candidate");
+        this.currentTerm++;
+        this.votedFor = id;
+        this.state = RaftState.CANDIDATE;
+        resetTimer();
+        this.sendRequestVote();
     }
 
     private void runAsLeader() {
@@ -141,7 +168,7 @@ public class RaftNode {
     }
 
     private int getElectionTimeout() {
-        return (int) (Math.random() * 30);
+        return (int) (Math.random() * 150);
     }
 
     private void resetTimer() {
@@ -150,11 +177,37 @@ public class RaftNode {
             @Override
             public void run() {
                 System.out.println("Election Timeout expired for server " + id);
-                if (state == RaftState.FOLLOWER) {
+                if (state == RaftState.FOLLOWER && !isHeartBeatReceived()) {
                     runAsCandidate();
                 }
             }
         };
         timer.schedule(timerTask, electionTimeout);
+    }
+
+    private void sendRequestVote() {
+        for (RaftPeer peer : peers) {
+            if (peer.getId() != id) {
+                System.out.println("Sending RequestVote from server " + id + " to server " + peer.getId());
+                sendMessage(peer.getId(), peer.getHostName(), peer.getPort(), new RequestVote(id, currentTerm, lastApplied, log.size()));
+            }
+        }
+    }
+
+    private boolean isHeartBeatReceived() {
+        return hasReceivedHeartbeat;
+    }
+
+    private void processVote(RequestVote requestVote) {
+        RequestVoteResponse voteResponse = new RequestVoteResponse(id, requestVote.getTerm(), false);
+        RaftPeer peer = peers.stream().filter(p -> p.getId() == requestVote.getCandidateId()).findFirst().get();
+        if (votedFor == -1 && requestVote.getTerm() > currentTerm) {
+            voteResponse.acceptVote();
+            this.votedFor = requestVote.getCandidateId();
+            this.currentTerm++;
+            resetTimer();
+            System.out.println("Server " + id + " voted for server " + requestVote.getCandidateId());
+        }
+        sendMessage(requestVote.getCandidateId(), peer.getHostName(), peer.getPort(), voteResponse);
     }
 }

@@ -1,5 +1,7 @@
 package com.bhavya.raftprotocol.leaderelection.rpc;
 
-public interface RaftMessage {
+import java.io.Serializable;
+
+public interface RaftMessage extends Serializable {
     public RaftMessageType getType();
 }
