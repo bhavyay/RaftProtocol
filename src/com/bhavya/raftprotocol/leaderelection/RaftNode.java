@@ -42,6 +42,8 @@ public class RaftNode {
 
     private boolean hasReceivedHeartbeat;
 
+    private int votesReceived = 0;
+
     public RaftNode(int id, String hostName, int port, List<RaftPeer> peerList) {
         this.id = id;
         this.hostName = hostName;
@@ -124,6 +126,7 @@ public class RaftNode {
                         RequestVoteResponse requestVoteResponse = (RequestVoteResponse) raftMessage;
                         System.out.println("Server " + id + " received request vote response from server " +
                                 requestVoteResponse.getVoterId() + " with vote granted " + requestVoteResponse.isVoteGranted());
+                        processVoteResponse(requestVoteResponse);
                         break;
                 }
             }
@@ -164,7 +167,7 @@ public class RaftNode {
     }
 
     private void runAsLeader() {
-        // TODO
+        System.out.println("Server " + id + " is running as leader");
     }
 
     private int getElectionTimeout() {
@@ -209,5 +212,21 @@ public class RaftNode {
             System.out.println("Server " + id + " voted for server " + requestVote.getCandidateId());
         }
         sendMessage(requestVote.getCandidateId(), peer.getHostName(), peer.getPort(), voteResponse);
+    }
+
+    private void processVoteResponse(RequestVoteResponse voteResponse) {
+        if (voteResponse.getTerm() > currentTerm) {
+            this.currentTerm = voteResponse.getTerm();
+            this.state = RaftState.FOLLOWER;
+            this.votedFor = -1;
+            this.votesReceived = 0;
+            resetTimer();
+        }
+        if (voteResponse.isVoteGranted()) {
+            votesReceived++;
+            if (votesReceived > peers.size() / 2) {
+                runAsLeader();
+            }
+        }
     }
 }

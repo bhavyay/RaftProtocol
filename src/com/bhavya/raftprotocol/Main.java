@@ -10,5 +10,8 @@ public class Main {
         RaftCluster cluster = new RaftCluster();
         cluster.addServer(1, "localhost", 8081);
         cluster.addServer(2, "localhost", 8082);
+        cluster.addServer(3, "localhost", 8083);
+        cluster.addServer(4, "localhost", 8084);
+        cluster.addServer(5, "localhost", 8085);
     }
 }

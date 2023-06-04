@@ -1,4 +1,4 @@
-package com.bhavya.raftprotocol.leaderelection.rpc;
+package com.bhavya.raftprotocol.leaderelection;
 
 public class RaftPeer {
     private int id;
