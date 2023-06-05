@@ -8,6 +8,10 @@ public class RaftCluster {
     private List<RaftNode> nodes = new ArrayList<>();
     private List<RaftPeer> peers = new ArrayList<>();
 
+    public RaftCluster(List<RaftPeer> peers) {
+        this.peers = peers;
+    }
+
     public void addServer(int id, String hostName, int port) {
         try {
             RaftNode node = new RaftNode(id, hostName, port, peers);
@@ -21,6 +25,5 @@ public class RaftCluster {
 
     private void addNode(RaftNode node) {
         this.nodes.add(node);
-        this.peers.add(new RaftPeer(node.getId(), node.getHostName(), node.getPort()));
     }
 }

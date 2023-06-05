@@ -8,6 +8,8 @@ import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class RaftNode {
     private int id;
@@ -44,6 +46,8 @@ public class RaftNode {
 
     private int votesReceived = 0;
 
+    ExecutorService executorService;
+
     public RaftNode(int id, String hostName, int port, List<RaftPeer> peerList) {
         this.id = id;
         this.hostName = hostName;
@@ -63,6 +67,7 @@ public class RaftNode {
 
         this.electionTimeout = getElectionTimeout();
         System.out.println("Election timeout for server " + id + " is " + electionTimeout);
+        System.out.println("Peer list for server " + id + " is " + peers.stream().map(RaftPeer::toString).reduce("", (a, b) -> a + b + ", "));
         this.connections = new HashMap<>();
     }
 
@@ -84,19 +89,19 @@ public class RaftNode {
     }
 
     public void startListening() {
-        listenThread = new Thread(() -> {
-           try {
-               serverSocket = new ServerSocket(port);
+        executorService = Executors.newSingleThreadExecutor();
+        executorService.execute(() -> {
+            try {
+                serverSocket = new ServerSocket(port);
 
-               while (!Thread.currentThread().isInterrupted()) {
-                   Socket clientSocket = serverSocket.accept();
-                   handleClient(clientSocket);
-               }
-           } catch (IOException e) {
+                while (true) {
+                    Socket clientSocket = serverSocket.accept();
+                    new Thread(() -> handleClient(clientSocket)).start();
+                }
+            } catch (IOException e) {
                 e.printStackTrace();
-           }
+            }
         });
-        listenThread.start();
     }
 
     private void handleClient(Socket clientSocket) {
@@ -132,6 +137,7 @@ public class RaftNode {
             }
         } catch (IOException | ClassNotFoundException e) {
             System.out.println("Error in handling client " + clientSocket.getPort() + " on server " + id);
+            System.out.println("Exception: " + e.getMessage());
         }
     }
 
@@ -192,7 +198,7 @@ public class RaftNode {
         for (RaftPeer peer : peers) {
             if (peer.getId() != id) {
                 System.out.println("Sending RequestVote from server " + id + " to server " + peer.getId());
-                sendMessage(peer.getId(), peer.getHostName(), peer.getPort(), new RequestVote(id, currentTerm, lastApplied, log.size()));
+                sendMessage(peer.getId(), peer.getHostName(), peer.getPort(), new RequestVote(currentTerm, id, lastApplied, log.size()));
             }
         }
     }
@@ -203,7 +209,12 @@ public class RaftNode {
 
     private void processVote(RequestVote requestVote) {
         RequestVoteResponse voteResponse = new RequestVoteResponse(id, requestVote.getTerm(), false);
-        RaftPeer peer = peers.stream().filter(p -> p.getId() == requestVote.getCandidateId()).findFirst().get();
+        Optional<RaftPeer> peerOptional = peers.stream().filter(p -> p.getId() == requestVote.getCandidateId()).findFirst();
+        if (peerOptional.isEmpty()) {
+            System.out.println("Server " + id + " received request vote from unknown server " + requestVote.getCandidateId());
+            return;
+        }
+        RaftPeer peer = peerOptional.get();
         if (votedFor == -1 && requestVote.getTerm() > currentTerm) {
             voteResponse.acceptVote();
             this.votedFor = requestVote.getCandidateId();

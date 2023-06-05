@@ -22,4 +22,13 @@ public class RaftPeer {
     public int getPort() {
         return port;
     }
+
+    @Override
+    public String toString() {
+        return "RaftPeer{" +
+                "id=" + id +
+                ", hostName='" + hostName + '\'' +
+                ", port=" + port +
+                '}';
+    }
 }
