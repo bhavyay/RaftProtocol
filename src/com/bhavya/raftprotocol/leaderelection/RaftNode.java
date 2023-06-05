@@ -118,6 +118,7 @@ public class RaftNode {
                 switch (raftMessage.getType()) {
                     case APPEND_ENTRIES:
                         AppendEntries appendEntries = (AppendEntries) raftMessage;
+                        processAppendEntries(appendEntries);
                         break;
                     case APPEND_ENTRIES_RESPONSE:
                         AppendEntriesResponse appendEntriesResponse = (AppendEntriesResponse) raftMessage;
@@ -174,6 +175,7 @@ public class RaftNode {
 
     private void runAsLeader() {
         System.out.println("Server " + id + " is running as leader");
+        sendAppendEntries();
     }
 
     private int getElectionTimeout() {
@@ -238,6 +240,26 @@ public class RaftNode {
             if (votesReceived > peers.size() / 2) {
                 runAsLeader();
             }
+        }
+    }
+
+    private void sendAppendEntries() {
+        for (RaftPeer peer : peers) {
+            if (peer.getId() != id) {
+                System.out.println("Sending AppendEntries from server " + id + " to server " + peer.getId());
+                sendMessage(peer.getId(), peer.getHostName(), peer.getPort(), new AppendEntries(currentTerm, id, 0, 0, null, 0));
+            }
+        }
+    }
+
+    private void processAppendEntries(AppendEntries appendEntries) {
+        if (this.state == RaftState.CANDIDATE) {
+            System.out.println("Server " + id + " running as follower");
+            this.currentTerm = appendEntries.getTerm();
+            this.state = RaftState.FOLLOWER;
+            this.votedFor = -1;
+            this.votesReceived = 0;
+            resetTimer();
         }
     }
 }
