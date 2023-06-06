@@ -211,7 +211,7 @@ public class RaftNode {
 
     private void processVote(RequestVote requestVote) {
         RequestVoteResponse voteResponse = new RequestVoteResponse(id, requestVote.getTerm(), false);
-        Optional<RaftPeer> peerOptional = peers.stream().filter(p -> p.getId() == requestVote.getCandidateId()).findFirst();
+        Optional<RaftPeer> peerOptional = getPeer(requestVote.getCandidateId());
         if (peerOptional.isEmpty()) {
             System.out.println("Server " + id + " received request vote from unknown server " + requestVote.getCandidateId());
             return;
@@ -253,13 +253,31 @@ public class RaftNode {
     }
 
     private void processAppendEntries(AppendEntries appendEntries) {
-        if (this.state == RaftState.CANDIDATE) {
+        int term = appendEntries.getTerm();
+        Optional<RaftPeer> peerOptional = getPeer(appendEntries.getLeaderId());
+        if (peerOptional.isEmpty()) {
+            System.out.println("Server " + id + " received append entries from unknown server " + appendEntries.getLeaderId());
+            return;
+        }
+
+        RaftPeer peer = peerOptional.get();
+        if (term < currentTerm) {
+            sendMessage(appendEntries.getLeaderId(), peer.getHostName(), peer.getPort(), new AppendEntriesResponse(this.currentTerm, false));
+            return;
+        }
+
+        this.currentTerm = term;
+        if (this.state == RaftState.CANDIDATE || this.state == RaftState.LEADER) {
             System.out.println("Server " + id + " running as follower");
-            this.currentTerm = appendEntries.getTerm();
             this.state = RaftState.FOLLOWER;
             this.votedFor = -1;
             this.votesReceived = 0;
-            resetTimer();
         }
+        sendMessage(appendEntries.getLeaderId(), peer.getHostName(), peer.getPort(), new AppendEntriesResponse(this.currentTerm, true));
+        resetTimer();
+    }
+
+    private Optional<RaftPeer> getPeer(int peerId) {
+        return peers.stream().filter(p -> p.getId() == peerId).findFirst();
     }
 }
