@@ -4,7 +4,10 @@ public class AppendEntriesResponse implements RaftMessage {
     private final int term;
     private final boolean success;
 
-    public AppendEntriesResponse(int term, boolean success) {
+    private final int followerId;
+
+    public AppendEntriesResponse(int followerId, int term, boolean success) {
+        this.followerId = followerId;
         this.term = term;
         this.success = success;
     }
@@ -20,5 +23,9 @@ public class AppendEntriesResponse implements RaftMessage {
     @Override
     public RaftMessageType getType() {
         return RaftMessageType.APPEND_ENTRIES_RESPONSE;
+    }
+
+    public int getFollowerId() {
+        return followerId;
     }
 }

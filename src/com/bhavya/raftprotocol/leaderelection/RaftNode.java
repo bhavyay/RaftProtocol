@@ -38,8 +38,6 @@ public class RaftNode {
 
     private int electionTimeout;
 
-    private Thread listenThread;
-
     private List<RaftPeer> peers;
 
     private boolean hasReceivedHeartbeat;
@@ -106,9 +104,6 @@ public class RaftNode {
 
     private void handleClient(Socket clientSocket) {
         try {
-
-//            ObjectOutputStream outputStream = new ObjectOutputStream(clientSocket.getOutputStream());
-
             while (!Thread.currentThread().isInterrupted()) {
                 ObjectInputStream inputStream = new ObjectInputStream(clientSocket.getInputStream());
                 RaftMessage raftMessage = (RaftMessage) inputStream.readObject();
@@ -116,24 +111,26 @@ public class RaftNode {
                     break;
                 }
                 switch (raftMessage.getType()) {
-                    case APPEND_ENTRIES:
+                    case APPEND_ENTRIES -> {
                         AppendEntries appendEntries = (AppendEntries) raftMessage;
                         processAppendEntries(appendEntries);
-                        break;
-                    case APPEND_ENTRIES_RESPONSE:
+                    }
+                    case APPEND_ENTRIES_RESPONSE -> {
                         AppendEntriesResponse appendEntriesResponse = (AppendEntriesResponse) raftMessage;
-                        break;
-                    case REQUEST_VOTE:
+                        System.out.println("Server " + id + " received append entries response from server " +
+                                appendEntriesResponse.getFollowerId() + " with success " + appendEntriesResponse.isSuccess());
+                    }
+                    case REQUEST_VOTE -> {
                         RequestVote requestVote = (RequestVote) raftMessage;
                         System.out.println("Server " + id + " received request vote from server " + requestVote.getCandidateId());
                         processVote(requestVote);
-                        break;
-                    case REQUEST_VOTE_RESPONSE:
+                    }
+                    case REQUEST_VOTE_RESPONSE -> {
                         RequestVoteResponse requestVoteResponse = (RequestVoteResponse) raftMessage;
                         System.out.println("Server " + id + " received request vote response from server " +
                                 requestVoteResponse.getVoterId() + " with vote granted " + requestVoteResponse.isVoteGranted());
                         processVoteResponse(requestVoteResponse);
-                        break;
+                    }
                 }
             }
         } catch (IOException | ClassNotFoundException e) {
@@ -262,7 +259,7 @@ public class RaftNode {
 
         RaftPeer peer = peerOptional.get();
         if (term < currentTerm) {
-            sendMessage(appendEntries.getLeaderId(), peer.getHostName(), peer.getPort(), new AppendEntriesResponse(this.currentTerm, false));
+            sendAppendEntriesRequestResponse(peer, false);
             return;
         }
 
@@ -273,11 +270,15 @@ public class RaftNode {
             this.votedFor = -1;
             this.votesReceived = 0;
         }
-        sendMessage(appendEntries.getLeaderId(), peer.getHostName(), peer.getPort(), new AppendEntriesResponse(this.currentTerm, true));
+        sendAppendEntriesRequestResponse(peer, true);
         resetTimer();
     }
 
     private Optional<RaftPeer> getPeer(int peerId) {
         return peers.stream().filter(p -> p.getId() == peerId).findFirst();
+    }
+
+    private void sendAppendEntriesRequestResponse(RaftPeer peer, boolean success) {
+        sendMessage(peer.getId(), peer.getHostName(), peer.getPort(), new AppendEntriesResponse(id, currentTerm, success));
     }
 }
