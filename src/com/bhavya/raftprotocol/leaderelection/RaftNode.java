@@ -165,6 +165,7 @@ public class RaftNode {
         System.out.println("Server " + id + " is running as candidate");
         this.currentTerm++;
         this.votedFor = id;
+        this.votesReceived = 1;
         this.state = RaftState.CANDIDATE;
         resetTimer();
         this.sendRequestVote();
@@ -176,7 +177,7 @@ public class RaftNode {
     }
 
     private int getElectionTimeout() {
-        return (int) (Math.random() * 150);
+        return (int) (Math.random() * 300);
     }
 
     private void resetTimer() {
@@ -185,11 +186,13 @@ public class RaftNode {
             @Override
             public void run() {
                 System.out.println("Election Timeout expired for server " + id);
-                if (state == RaftState.FOLLOWER && !isHeartBeatReceived()) {
+                if ((state == RaftState.FOLLOWER || state == RaftState.CANDIDATE) && !isHeartBeatReceived()) {
                     runAsCandidate();
                 }
             }
         };
+        this.electionTimeout = getElectionTimeout();
+        System.out.println("Election timeout for server " + id + " is " + electionTimeout);
         timer.schedule(timerTask, electionTimeout);
     }
 
