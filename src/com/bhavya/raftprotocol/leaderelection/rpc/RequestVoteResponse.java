@@ -6,10 +6,9 @@ public class RequestVoteResponse implements RaftMessage {
 
     private int voterId;
 
-    public RequestVoteResponse(int voterId, int term, boolean voteGranted) {
+    public RequestVoteResponse(int voterId, int term) {
         this.voterId = voterId;
         this.term = term;
-        this.voteGranted = voteGranted;
     }
 
     @Override
@@ -27,6 +26,10 @@ public class RequestVoteResponse implements RaftMessage {
 
     public void acceptVote() {
         this.voteGranted = true;
+    }
+
+    public void rejectVote() {
+        this.voteGranted = false;
     }
 
     public int getVoterId() {

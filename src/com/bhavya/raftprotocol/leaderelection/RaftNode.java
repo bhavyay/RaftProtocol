@@ -8,6 +8,7 @@ import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -34,11 +35,11 @@ public class RaftNode {
     private int[] matchIndex;
 
     private ServerSocket serverSocket;
-    private Map<Integer, Socket> connections;
+    private ConcurrentHashMap<Integer, Socket> connections;
 
     private int electionTimeout;
 
-    private List<RaftPeer> peers;
+    private final List<RaftPeer> peers;
 
     private boolean hasReceivedHeartbeat;
 
@@ -66,7 +67,7 @@ public class RaftNode {
         this.electionTimeout = getElectionTimeout();
         System.out.println("Election timeout for server " + id + " is " + electionTimeout);
         System.out.println("Peer list for server " + id + " is " + peers.stream().map(RaftPeer::toString).reduce("", (a, b) -> a + b + ", "));
-        this.connections = new HashMap<>();
+        this.connections = new ConcurrentHashMap<>();
     }
 
     public int getId() {
@@ -135,7 +136,7 @@ public class RaftNode {
             }
         } catch (IOException | ClassNotFoundException e) {
             System.out.println("Error in handling client " + clientSocket.getPort() + " on server " + id);
-            System.out.println("Exception: " + e.getMessage());
+            System.out.println("Exception: " + e.getMessage() + " for server " + id);
         }
     }
 
@@ -146,13 +147,18 @@ public class RaftNode {
                 Socket socket = new Socket(destinationHost, destinationPort);
                 connections.put(destinationId, socket);
             }
-            ObjectOutputStream outputStream = new ObjectOutputStream(connections.get(destinationId).getOutputStream());
-            outputStream.writeObject(raftMessage);
-            outputStream.flush();
-            System.out.println("Server " + id + " sent message to server " + destinationId);
+            new Thread(() -> {
+                try {
+                    ObjectOutputStream outputStream = new ObjectOutputStream(connections.get(destinationId).getOutputStream());
+                    outputStream.writeObject(raftMessage);
+                    outputStream.flush();
+                    System.out.println("Server " + id + " sent message " +  raftMessage.getType() + " to server " + destinationId);
+                } catch (IOException e) {
+                    System.out.println("Error in sending message from server " + id + " to server " + destinationId + " Error: " + e.getMessage());
+                }
+            }).start();
         } catch (IOException e) {
-            System.out.println("Error in sending message from server " + id + " to server " + destinationId);
-            System.out.println("Exception: " + e.getMessage());
+            System.out.println("Error in creating socket for server " + id + " to server " + destinationId + " " + e.getMessage());
         }
     }
 
@@ -162,22 +168,23 @@ public class RaftNode {
     }
 
     private void runAsCandidate() {
-        System.out.println("Server " + id + " is running as candidate");
         this.currentTerm++;
+        System.out.println("Server " + id + " is running as candidate for term " + currentTerm);
         this.votedFor = id;
         this.votesReceived = 1;
         this.state = RaftState.CANDIDATE;
-        resetTimer();
+        this.hasReceivedHeartbeat = false;
         this.sendRequestVote();
+        resetTimer();
     }
 
     private void runAsLeader() {
-        System.out.println("Server " + id + " is running as leader");
+        System.out.println("Server " + id + " is running as leader for term " + currentTerm);
         sendAppendEntries();
     }
 
     private int getElectionTimeout() {
-        return (int) (Math.random() * 300);
+        return (int) (3600 + (Math.random() * 500));
     }
 
     private void resetTimer() {
@@ -186,13 +193,11 @@ public class RaftNode {
             @Override
             public void run() {
                 System.out.println("Election Timeout expired for server " + id);
-                if ((state == RaftState.FOLLOWER || state == RaftState.CANDIDATE) && !isHeartBeatReceived()) {
+                if (((state == RaftState.FOLLOWER && votedFor == -1) || state == RaftState.CANDIDATE) && !isHeartBeatReceived()) {
                     runAsCandidate();
                 }
             }
         };
-        this.electionTimeout = getElectionTimeout();
-        System.out.println("Election timeout for server " + id + " is " + electionTimeout);
         timer.schedule(timerTask, electionTimeout);
     }
 
@@ -210,14 +215,16 @@ public class RaftNode {
     }
 
     private void processVote(RequestVote requestVote) {
-        RequestVoteResponse voteResponse = new RequestVoteResponse(id, requestVote.getTerm(), false);
+        RequestVoteResponse voteResponse = new RequestVoteResponse(id, requestVote.getTerm());
         Optional<RaftPeer> peerOptional = getPeer(requestVote.getCandidateId());
         if (peerOptional.isEmpty()) {
             System.out.println("Server " + id + " received request vote from unknown server " + requestVote.getCandidateId());
             return;
         }
         RaftPeer peer = peerOptional.get();
-        if (votedFor == -1 && requestVote.getTerm() > currentTerm) {
+        if (requestVote.getTerm() < currentTerm || (votedFor != -1 && votedFor != requestVote.getCandidateId())) {
+            voteResponse.rejectVote();
+        } else {
             voteResponse.acceptVote();
             this.votedFor = requestVote.getCandidateId();
             this.currentTerm++;
@@ -237,7 +244,7 @@ public class RaftNode {
         }
         if (voteResponse.isVoteGranted()) {
             votesReceived++;
-            if (votesReceived > peers.size() / 2) {
+            if ((votesReceived > peers.size() / 2) && (state == RaftState.CANDIDATE)) {
                 runAsLeader();
             }
         }
@@ -272,6 +279,7 @@ public class RaftNode {
             this.state = RaftState.FOLLOWER;
             this.votedFor = -1;
             this.votesReceived = 0;
+            this.hasReceivedHeartbeat = true;
         }
         sendAppendEntriesRequestResponse(peer, true);
         resetTimer();
