@@ -172,12 +172,14 @@ public class RaftNode {
     }
 
     private void runAsLeader() {
-        System.out.println("Server " + id + " is running as leader");
-        sendAppendEntries();
+        if (this.state != RaftState.LEADER) {
+            System.out.println("Server " + id + " is running as leader");
+            sendAppendEntries();
+        }
     }
 
     private int getElectionTimeout() {
-        return (int) (Math.random() * 300);
+        return (int) (Math.random() * 3600);
     }
 
     private void resetTimer() {
@@ -222,7 +224,7 @@ public class RaftNode {
             this.votedFor = requestVote.getCandidateId();
             this.currentTerm++;
             resetTimer();
-            System.out.println("Server " + id + " voted for server " + requestVote.getCandidateId());
+            System.out.println("Server " + id + " voted for server " + requestVote.getCandidateId() + " in term " + currentTerm);
         }
         sendMessage(requestVote.getCandidateId(), peer.getHostName(), peer.getPort(), voteResponse);
     }
