@@ -15,7 +15,6 @@ public class RaftNode {
     private int id;
 
     //network information of the server
-    private String hostName;
     private int port;
 
     private RaftState state;
@@ -46,9 +45,8 @@ public class RaftNode {
 
     ExecutorService executorService;
 
-    public RaftNode(int id, String hostName, int port, List<RaftPeer> peerList) {
+    public RaftNode(int id, int port, List<RaftPeer> peerList) {
         this.id = id;
-        this.hostName = hostName;
         this.port = port;
         this.state = RaftState.FOLLOWER;
 
@@ -71,10 +69,6 @@ public class RaftNode {
 
     public int getId() {
         return id;
-    }
-
-    public String getHostName() {
-        return hostName;
     }
 
     public int getPort() {
