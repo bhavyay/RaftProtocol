@@ -1,4 +1,4 @@
-package com.bhavya.raftprotocol;
+package com.bhavya.raftprotocol.example;
 
 import com.bhavya.raftprotocol.leaderelection.RaftCluster;
 import com.bhavya.raftprotocol.leaderelection.RaftPeer;
@@ -22,10 +22,13 @@ public class RaftClusterExample {
                 int command = Integer.parseInt(reader.readLine());
                 if (command == 1) {
                     cluster = new RaftCluster(getPeers());
+                    System.out.println("Cluster configured successfully!");
                 } else if (command == 2) {
                     assert cluster != null;
                     cluster.updateClusterInfoToServer();
+                    System.out.println("Cluster info updated successfully!");
                 } else {
+                    System.out.println("Quitting...");
                     break;
                 }
             } catch (Exception e) {
@@ -36,8 +39,8 @@ public class RaftClusterExample {
     private static List<RaftPeer> getPeers() {
         List<RaftPeer> peers = new ArrayList<>();
         peers.add(new RaftPeer(1, "localhost", 8081));
-        peers.add(new RaftPeer(2, "localhost", 8082));
-        peers.add(new RaftPeer(3, "localhost", 8083));
+//        peers.add(new RaftPeer(2, "localhost", 8082));
+//        peers.add(new RaftPeer(3, "localhost", 8083));
         return peers;
     }
 }

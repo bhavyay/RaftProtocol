@@ -1,5 +1,8 @@
 package com.bhavya.raftprotocol.leaderelection;
 
+import com.bhavya.raftprotocol.leaderelection.rpc.ClusterInfoUpdate;
+import com.google.gson.Gson;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,22 +15,11 @@ public class RaftCluster {
 
     public void updateClusterInfoToServer() {
         for (RaftPeer peer : peers) {
+            System.out.println("Updating cluster info to server " + peer.getId());
             TcpConnection connection = new TcpConnection(peer.getHostName(), peer.getPort());
-            connection.sendMessage("type=clusterInfo;servers=" + getClusterInfo(peer.getId()));
+            ClusterInfoUpdate clusterInfoUpdate = new ClusterInfoUpdate("CLUSTER_INFO_UPDATE", peers);
+            String message = new Gson().toJson(clusterInfoUpdate);
+            connection.sendMessage(message);
         }
-    }
-
-    private String getClusterInfo(int id) {
-        StringBuilder clusterInfo = new StringBuilder();
-        for (RaftPeer peer : peers) {
-            if (peer.getId() == id) {
-                continue;
-            }
-            clusterInfo.append("id=").append(peer.getId()).append(";");
-            clusterInfo.append("hostName=").append(peer.getHostName()).append(";");
-            clusterInfo.append("port=").append(peer.getPort()).append(";");
-            clusterInfo.append("|");
-        }
-        return clusterInfo.toString();
     }
 }
