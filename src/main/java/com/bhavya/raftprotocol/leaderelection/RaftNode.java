@@ -25,13 +25,12 @@ public class RaftNode {
     private int votedFor;
     private Map<Integer, Socket> connections;
     private int electionTimeout;
-    private final List<RaftPeer> peers;
+    private List<RaftPeer> peers;
     private int votesReceived = 0;
 
     public RaftNode(int id, int port) {
         this.id = id;
         this.port = port;
-        this.state = RaftState.FOLLOWER;
 
         this.currentTerm = 0;
         this.votedFor = -1;
@@ -82,7 +81,9 @@ public class RaftNode {
                 System.out.println("Raft message: " + raftMessage);
                 if (raftMessage.getType().equals(RaftMessageType.CLUSTER_INFO_UPDATE.toString())) {
                     ClusterInfoUpdate clusterInfoUpdate = gson.fromJson(raftMessage.getMessage(), ClusterInfoUpdate.class);
-                    System.out.println("Cluster info update: " + clusterInfoUpdate);
+                    processClusterInfoUpdate(clusterInfoUpdate);
+                } else if (raftMessage.getType().equals(RaftMessageType.START_SERVER.toString())) {
+                    runAsFollower();
                 }
             }
         } catch (IOException e) {
@@ -93,6 +94,7 @@ public class RaftNode {
 
     private void runAsFollower() {
         System.out.println("Server " + id + " is running as follower");
+        this.state = RaftState.FOLLOWER;
         resetTimer();
     }
 
@@ -102,7 +104,7 @@ public class RaftNode {
         this.votedFor = id;
         this.votesReceived = 1;
         this.state = RaftState.CANDIDATE;
-        resetTimer();
+//        resetTimer();
     }
 
     private void runAsLeader() {
@@ -129,5 +131,9 @@ public class RaftNode {
         this.electionTimeout = getElectionTimeout();
         System.out.println("Election timeout for server " + id + " is " + electionTimeout);
         timer.schedule(timerTask, electionTimeout);
+    }
+
+    private void processClusterInfoUpdate(ClusterInfoUpdate clusterInfoUpdate) {
+        this.peers = clusterInfoUpdate.getServers();
     }
 }

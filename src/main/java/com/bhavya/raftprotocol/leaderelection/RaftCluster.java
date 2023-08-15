@@ -26,4 +26,14 @@ public class RaftCluster {
             connection.sendMessage(message);
         }
     }
+
+    public void startRaftServers() {
+        for (RaftPeer peer : peers) {
+            System.out.println("Starting server " + peer.getId());
+            TcpConnection connection = new TcpConnection(peer.getHostName(), peer.getPort());
+            RaftMessage raftMessage = new RaftMessage(RaftMessageType.START_SERVER.toString(), "");
+            String message = new Gson().toJson(raftMessage);
+            connection.sendMessage(message);
+        }
+    }
 }

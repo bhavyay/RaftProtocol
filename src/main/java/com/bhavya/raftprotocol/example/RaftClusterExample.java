@@ -27,6 +27,10 @@ public class RaftClusterExample {
                     assert cluster != null;
                     cluster.updateClusterInfoToServer();
                     System.out.println("Cluster info updated successfully!");
+                } else if (command == 3) {
+                    assert cluster != null;
+                    cluster.startRaftServers();
+                    System.out.println("Servers started successfully!");
                 } else {
                     System.out.println("Quitting...");
                     break;
