@@ -1,6 +1,8 @@
 package com.bhavya.raftprotocol.leaderelection;
 
 import com.bhavya.raftprotocol.leaderelection.rpc.ClusterInfoUpdate;
+import com.bhavya.raftprotocol.leaderelection.rpc.RaftMessage;
+import com.bhavya.raftprotocol.leaderelection.rpc.RaftMessageType;
 import com.google.gson.Gson;
 
 import java.util.ArrayList;
@@ -17,8 +19,10 @@ public class RaftCluster {
         for (RaftPeer peer : peers) {
             System.out.println("Updating cluster info to server " + peer.getId());
             TcpConnection connection = new TcpConnection(peer.getHostName(), peer.getPort());
-            ClusterInfoUpdate clusterInfoUpdate = new ClusterInfoUpdate("CLUSTER_INFO_UPDATE", peers);
-            String message = new Gson().toJson(clusterInfoUpdate);
+            ClusterInfoUpdate clusterInfoUpdate = new ClusterInfoUpdate("cluster", peers);
+            String payload = new Gson().toJson(clusterInfoUpdate);
+            RaftMessage raftMessage = new RaftMessage(RaftMessageType.CLUSTER_INFO_UPDATE.toString(), payload);
+            String message = new Gson().toJson(raftMessage);
             connection.sendMessage(message);
         }
     }

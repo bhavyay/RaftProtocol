@@ -9,8 +9,6 @@ import java.util.List;
 @AllArgsConstructor
 @Data
 public class ClusterInfoUpdate {
-
-    private String type;
+    private String id;
     private List<RaftPeer> servers;
-
 }

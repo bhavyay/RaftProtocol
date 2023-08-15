@@ -1,5 +1,10 @@
 package com.bhavya.raftprotocol.leaderelection;
 
+import com.bhavya.raftprotocol.leaderelection.rpc.ClusterInfoUpdate;
+import com.bhavya.raftprotocol.leaderelection.rpc.RaftMessage;
+import com.bhavya.raftprotocol.leaderelection.rpc.RaftMessageType;
+import com.google.gson.Gson;
+
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -62,10 +67,23 @@ public class RaftNode {
             while (!Thread.currentThread().isInterrupted()) {
                 BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                 String message = bufferedReader.readLine();
-                System.out.println("Server " + id + " received message from server " + clientSocket.getPort() + " : " + message);
+                System.out.println("Server " + id + " received message from server :" + message);
+                if (message == null) {
+                    System.out.println("Server " + id + " is closing connection with server " + clientSocket.getPort());
+                    clientSocket.close();
+                    break;
+                }
                 DataOutputStream dataOutputStream = new DataOutputStream(clientSocket.getOutputStream());
                 dataOutputStream.writeBytes("ACK\n");
                 dataOutputStream.flush();
+
+                Gson gson = new Gson();
+                RaftMessage raftMessage = gson.fromJson(message, RaftMessage.class);
+                System.out.println("Raft message: " + raftMessage);
+                if (raftMessage.getType().equals(RaftMessageType.CLUSTER_INFO_UPDATE.toString())) {
+                    ClusterInfoUpdate clusterInfoUpdate = gson.fromJson(raftMessage.getMessage(), ClusterInfoUpdate.class);
+                    System.out.println("Cluster info update: " + clusterInfoUpdate);
+                }
             }
         } catch (IOException e) {
             System.out.println("Error in handling client " + clientSocket.getPort() + " on server " + id);
