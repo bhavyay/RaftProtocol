@@ -26,6 +26,8 @@ public class RaftNode {
     private Map<Integer, RaftPeer> peers;
     private int votesReceived = 0;
 
+    private boolean isHeartBeatReceived = false;
+
     public RaftNode(int id, int port) {
         this.id = id;
         this.port = port;
@@ -91,6 +93,12 @@ public class RaftNode {
                     DataOutputStream dataOutputStream = new DataOutputStream(clientSocket.getOutputStream());
                     dataOutputStream.writeBytes(new Gson().toJson(response) + "\n");
                     dataOutputStream.flush();
+                } else if (raftMessage.getType().equals(RaftMessageType.APPEND_ENTRIES.toString())) {
+                    AppendEntries appendEntries = gson.fromJson(raftMessage.getMessage(), AppendEntries.class);
+                    AppendEntriesResponse response = processAppendEntries(appendEntries);
+                    DataOutputStream dataOutputStream = new DataOutputStream(clientSocket.getOutputStream());
+                    dataOutputStream.writeBytes(new Gson().toJson(response) + "\n");
+                    dataOutputStream.flush();
                 }
             }
         } catch (IOException e) {
@@ -121,6 +129,8 @@ public class RaftNode {
     private void runAsLeader() {
         if (this.state != RaftState.LEADER) {
             System.out.println("Server " + id + " is running as leader");
+            this.state = RaftState.LEADER;
+            sendHeartBeatToFollowers();
         }
     }
 
@@ -134,8 +144,10 @@ public class RaftNode {
             @Override
             public void run() {
                 System.out.println("Election Timeout expired for server " + id);
-                if ((state == RaftState.FOLLOWER || state == RaftState.CANDIDATE)) {
+                if ((state == RaftState.FOLLOWER && !isHeartBeatReceived) || (state == RaftState.CANDIDATE)) {
                     runAsCandidate();
+                } else if (state == RaftState.LEADER) {
+                    sendHeartBeatToFollowers();
                 }
             }
         };
@@ -193,5 +205,38 @@ public class RaftNode {
             resetTimer();
         }
         return response;
+    }
+
+    private void sendAppendEntriesRequest(Integer destinationId, AppendEntries appendEntries) {
+        TcpConnection tcpConnection = getClientConnection(destinationId);
+        RaftMessage message = new RaftMessage(RaftMessageType.APPEND_ENTRIES.toString(), new Gson().toJson(appendEntries));
+        String response = tcpConnection.sendMessage(new Gson().toJson(message));
+        if (response != null) {
+            AppendEntriesResponse appendEntriesResponse = new Gson().fromJson(response, AppendEntriesResponse.class);
+            if (appendEntriesResponse.isSuccess()) {
+                System.out.println("Follower " + destinationId + " is in sync with leader " + id);
+            }
+        }
+    }
+
+    private void sendHeartBeatToFollowers() {
+        for (RaftPeer peer : peers.values()) {
+            AppendEntries appendEntries = new AppendEntries(currentTerm, id);
+            sendAppendEntriesRequest(peer.getId(), appendEntries);
+        }
+        resetTimer();
+    }
+
+    private AppendEntriesResponse processAppendEntries(AppendEntries appendEntries) {
+        if (appendEntries.getTerm() < currentTerm) {
+            return new AppendEntriesResponse(currentTerm, false);
+        }
+        if (this.state == RaftState.CANDIDATE) {
+            this.state = RaftState.FOLLOWER;
+        }
+        this.currentTerm = appendEntries.getTerm();
+        this.isHeartBeatReceived = true;
+        resetTimer();
+        return new AppendEntriesResponse(currentTerm, true);
     }
 }
