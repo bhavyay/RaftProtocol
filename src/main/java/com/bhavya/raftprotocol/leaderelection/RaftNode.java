@@ -1,8 +1,6 @@
 package com.bhavya.raftprotocol.leaderelection;
 
-import com.bhavya.raftprotocol.leaderelection.rpc.ClusterInfoUpdate;
-import com.bhavya.raftprotocol.leaderelection.rpc.RaftMessage;
-import com.bhavya.raftprotocol.leaderelection.rpc.RaftMessageType;
+import com.bhavya.raftprotocol.leaderelection.rpc.*;
 import com.google.gson.Gson;
 
 import java.io.*;
@@ -23,9 +21,9 @@ public class RaftNode {
     //persistent state on all servers
     private int currentTerm;
     private int votedFor;
-    private Map<Integer, Socket> connections;
+    private Map<Integer, TcpConnection> connections;
     private int electionTimeout;
-    private List<RaftPeer> peers;
+    private Map<Integer, RaftPeer> peers;
     private int votesReceived = 0;
 
     public RaftNode(int id, int port) {
@@ -35,7 +33,7 @@ public class RaftNode {
         this.currentTerm = 0;
         this.votedFor = -1;
 
-        this.peers = new ArrayList<>();
+        this.peers = new HashMap<>();
 
         this.electionTimeout = getElectionTimeout();
         System.out.println("Election timeout for server " + id + " is " + electionTimeout);
@@ -72,9 +70,6 @@ public class RaftNode {
                     clientSocket.close();
                     break;
                 }
-                DataOutputStream dataOutputStream = new DataOutputStream(clientSocket.getOutputStream());
-                dataOutputStream.writeBytes("ACK\n");
-                dataOutputStream.flush();
 
                 Gson gson = new Gson();
                 RaftMessage raftMessage = gson.fromJson(message, RaftMessage.class);
@@ -82,8 +77,20 @@ public class RaftNode {
                 if (raftMessage.getType().equals(RaftMessageType.CLUSTER_INFO_UPDATE.toString())) {
                     ClusterInfoUpdate clusterInfoUpdate = gson.fromJson(raftMessage.getMessage(), ClusterInfoUpdate.class);
                     processClusterInfoUpdate(clusterInfoUpdate);
+                    DataOutputStream dataOutputStream = new DataOutputStream(clientSocket.getOutputStream());
+                    dataOutputStream.writeBytes("ACK\n");
+                    dataOutputStream.flush();
                 } else if (raftMessage.getType().equals(RaftMessageType.START_SERVER.toString())) {
                     runAsFollower();
+                    DataOutputStream dataOutputStream = new DataOutputStream(clientSocket.getOutputStream());
+                    dataOutputStream.writeBytes("ACK\n");
+                    dataOutputStream.flush();
+                } else if (raftMessage.getType().equals(RaftMessageType.REQUEST_VOTE.toString())) {
+                    RequestVote requestVote = gson.fromJson(raftMessage.getMessage(), RequestVote.class);
+                    RequestVoteResponse response = processRequestVote(requestVote);
+                    DataOutputStream dataOutputStream = new DataOutputStream(clientSocket.getOutputStream());
+                    dataOutputStream.writeBytes(new Gson().toJson(response) + "\n");
+                    dataOutputStream.flush();
                 }
             }
         } catch (IOException e) {
@@ -104,7 +111,11 @@ public class RaftNode {
         this.votedFor = id;
         this.votesReceived = 1;
         this.state = RaftState.CANDIDATE;
-//        resetTimer();
+        for (RaftPeer peer : peers.values()) {
+            RequestVote requestVote = new RequestVote(currentTerm, id, 0, 0);
+            sendRequestVote(peer.getId(), requestVote);
+        }
+        resetTimer();
     }
 
     private void runAsLeader() {
@@ -134,6 +145,43 @@ public class RaftNode {
     }
 
     private void processClusterInfoUpdate(ClusterInfoUpdate clusterInfoUpdate) {
-        this.peers = clusterInfoUpdate.getServers();
+        for (RaftPeer peer : clusterInfoUpdate.getServers()) {
+            if (peer.getId() == id) {
+                continue;
+            }
+            if (!peers.containsKey(peer.getId())) {
+                peers.put(peer.getId(), peer);
+            }
+        }
+    }
+
+    private TcpConnection getClientConnection(Integer destinationId) {
+        if (!connections.containsKey(destinationId)) {
+            RaftPeer peer = peers.get(destinationId);
+            TcpConnection connection = new TcpConnection(peer.getHostName(), peer.getPort());
+            connections.put(destinationId, connection);
+        }
+        return connections.get(destinationId);
+    }
+
+    private void sendRequestVote(Integer destinationId, RequestVote requestVote) {
+        TcpConnection tcpConnection = getClientConnection(id);
+        RaftMessage message = new RaftMessage(RaftMessageType.REQUEST_VOTE.toString(), new Gson().toJson(requestVote));
+        tcpConnection.sendMessage(new Gson().toJson(message));
+    }
+
+    private RequestVoteResponse processRequestVote(RequestVote requestVote) {
+        RequestVoteResponse response = new RequestVoteResponse(currentTerm, false, id);
+        if (requestVote.getTerm() < currentTerm) {
+            return response;
+        }
+        if (votedFor == -1 || votedFor == requestVote.getCandidateId()) {
+            votedFor = requestVote.getCandidateId();
+            response.setVoteGranted(true);
+            this.votedFor = requestVote.getCandidateId();
+            this.currentTerm = requestVote.getTerm();
+            resetTimer();
+        }
+        return response;
     }
 }

@@ -43,7 +43,7 @@ public class RaftClusterExample {
     private static List<RaftPeer> getPeers() {
         List<RaftPeer> peers = new ArrayList<>();
         peers.add(new RaftPeer(1, "localhost", 8081));
-//        peers.add(new RaftPeer(2, "localhost", 8082));
+        peers.add(new RaftPeer(2, "localhost", 8082));
 //        peers.add(new RaftPeer(3, "localhost", 8083));
         return peers;
     }
