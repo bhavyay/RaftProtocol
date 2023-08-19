@@ -12,7 +12,7 @@ public class TcpConnection {
         this.port = port;
     }
 
-    public void sendMessage(String message) {
+    public String sendMessage(String message) {
         try {
             Socket socket = new Socket(host, port);
             OutputStream outputStream = socket.getOutputStream();
@@ -24,8 +24,10 @@ public class TcpConnection {
             System.out.println("Message sent to server " + host + ":" + port + " is " + message);
             String response = bufferedReader.readLine();
             System.out.println("Response from server " + host + ":" + port + " is " + response);
+            return response;
         } catch (Exception e) {
             System.out.println("Error: " + e.getMessage());
         }
+        return null;
     }
 }

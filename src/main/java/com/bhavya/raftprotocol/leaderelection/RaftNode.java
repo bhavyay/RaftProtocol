@@ -153,6 +153,7 @@ public class RaftNode {
                 peers.put(peer.getId(), peer);
             }
         }
+        System.out.println("Server " + id + " has peers: " + peers);
     }
 
     private TcpConnection getClientConnection(Integer destinationId) {
@@ -165,9 +166,18 @@ public class RaftNode {
     }
 
     private void sendRequestVote(Integer destinationId, RequestVote requestVote) {
-        TcpConnection tcpConnection = getClientConnection(id);
+        TcpConnection tcpConnection = getClientConnection(destinationId);
         RaftMessage message = new RaftMessage(RaftMessageType.REQUEST_VOTE.toString(), new Gson().toJson(requestVote));
-        tcpConnection.sendMessage(new Gson().toJson(message));
+        String response = tcpConnection.sendMessage(new Gson().toJson(message));
+        if (response != null) {
+            RequestVoteResponse requestVoteResponse = new Gson().fromJson(response, RequestVoteResponse.class);
+            if (requestVoteResponse.isVoteGranted()) {
+                votesReceived++;
+                if (votesReceived > peers.size() / 2) {
+                    runAsLeader();
+                }
+            }
+        }
     }
 
     private RequestVoteResponse processRequestVote(RequestVote requestVote) {
