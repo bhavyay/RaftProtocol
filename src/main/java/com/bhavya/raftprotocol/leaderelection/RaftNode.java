@@ -185,7 +185,7 @@ public class RaftNode {
             RequestVoteResponse requestVoteResponse = new Gson().fromJson(response, RequestVoteResponse.class);
             if (requestVoteResponse.isVoteGranted()) {
                 votesReceived++;
-                if (votesReceived > peers.size() / 2) {
+                if (votesReceived > (peers.size() + 1)/ 2) {
                     runAsLeader();
                 }
             }
